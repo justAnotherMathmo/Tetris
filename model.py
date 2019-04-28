@@ -35,7 +35,7 @@ class NoisyFactorizedLinear(nn.Linear):
 
 
 class DQN(nn.Module):
-    def __init__(self, h, w, num_outputs, history=None):
+    def __init__(self, h, w, num_outputs):
         super().__init__()
         self.input_layer_width = h * w
         self.num_outputs = num_outputs
@@ -48,12 +48,12 @@ class DQN(nn.Module):
             64,
             128,
         ]
-        self.layer_0 = nn.Conv2d(layer_widths[0], layer_widths[1], 3, padding=1)
-        self.layer_1 = nn.BatchNorm2d(num_features=layer_widths[1])
-        self.layer_2 = nn.Conv2d(layer_widths[1], layer_widths[2], 3, padding=1)
-        self.layer_3 = nn.BatchNorm2d(layer_widths[2])
-        self.layer_4 = nn.Conv2d(layer_widths[2], layer_widths[3], 3, padding=1)
-        self.layer_5 = nn.BatchNorm2d(layer_widths[3])
+        self.conv0 = nn.Conv2d(layer_widths[0], layer_widths[1], 3, padding=1)
+        self.bn0 = nn.BatchNorm2d(layer_widths[1])
+        self.conv1 = nn.Conv2d(layer_widths[1], layer_widths[2], 3, padding=1)
+        self.bn1 = nn.BatchNorm2d(layer_widths[2])
+        self.conv2 = nn.Conv2d(layer_widths[2], layer_widths[3], 3, padding=1)
+        self.bn2 = nn.BatchNorm2d(layer_widths[3])
 
         # Value Net
         self.value_layer1 = nn.Linear(layer_widths[3] * self.input_layer_width, layer_widths[4])
@@ -61,16 +61,14 @@ class DQN(nn.Module):
         self.value_layer2 = nn.Linear(layer_widths[4], 1)
 
         # Advantage Net
-        self.advantage_layer1 = NoisyFactorizedLinear(layer_widths[3] * self.input_layer_width, layer_widths[4])
+        self.advantage_layer1 = nn.Linear(layer_widths[3] * self.input_layer_width, layer_widths[4])
         self.abn = nn.BatchNorm1d(layer_widths[4])
-        self.advantage_layer2 = NoisyFactorizedLinear(layer_widths[4], self.num_outputs)
+        self.advantage_layer2 = nn.Linear(layer_widths[4], self.num_outputs)
 
     def forward(self, x):
-        # Encoder
-        #         x = self.shared_layers(x)
-        x1 = F.relu(self.layer_1(self.layer_0(x)))
-        x2 = F.relu(self.layer_3(self.layer_2(x1 + x)))
-        x3 = F.relu(self.layer_5(self.layer_4(x2 + x1)))
+        x1 = F.relu(self.bn0(self.conv0(x)))
+        x2 = F.relu(self.bn1(self.conv1(x1 + x)))
+        x3 = F.relu(self.bn2(self.conv2(x2 + x1)))
         x = x3.view(x3.size(0), -1)
 
         value = F.relu(self.vbn(self.value_layer1(x)))
