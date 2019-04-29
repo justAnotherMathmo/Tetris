@@ -108,12 +108,13 @@ def train(num_episodes=1000, human=False):
                 state_array[array_pos] = state
 
                 # Create reward
-                height = env._total_lines_cleared
+                height = reward.get_height(env)
                 lines = env._total_lines_cleared
                 reward_single = reward.create_reward(piece_fell, action, done, height, old_height, lines, old_lines)
                 reward_sum = (params.MULISTEP_GAMMA * reward_sum) + reward_single - (params.MULISTEP_GAMMA ** params.MULTISTEP_PARAM) * reward_array[array_pos]
                 reward_array[array_pos] = reward_single
                 reward_sum = torch.tensor([reward_sum], device=device).type(torch.float)
+                # print(reward_single, reward_sum, piece_fell, action, done, height, old_height, lines, old_lines)
 
                 # Store the transition in memory
                 if warmup > params.MULTISTEP_PARAM:
@@ -159,4 +160,6 @@ while True:
     torch.save(policy_net, f'{load_net_prefix}{idx}')
     idx += 1
 
+# from tetris.Tetris import watch_bot_tetris
+# action_func = lambda e: policy_net.eval()(utils.get_screen(e.get_grid(), device)).max(1)[1].view(1, 1).squeeze().item()
 # watch_bot_tetris(action_func, pieces=[O])

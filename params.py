@@ -16,7 +16,7 @@ EPS_DECAY = 500000
 # How many games occur between policy and target net updates
 TARGET_UPDATE = 25
 # Cost of doing a move that isn't a drop or a no-action
-MOVEMENT_COST = 0.01
+MOVEMENT_COST = 0 # 0.01
 LAYER_HISTORY = 4
 TRAIN_RATE = 4
 LEARNING_RATE = 5 * 10 ** (-4)
