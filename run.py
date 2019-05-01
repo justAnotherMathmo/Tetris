@@ -123,7 +123,8 @@ def train(num_episodes=1000, human=False):
                 # Perform one step of the optimization (on the target network)
                 if (warmup + 1) % params.TRAIN_RATE == 0:
                     loss.optimize_model(optimizer, model_memory, policy_net, target_net)
-                if done:
+                if done or t > 5000:
+                    # 5000 here just to stop us playing forever...
                     episode_durations.append(t + 1)
                     lines_cleared.append(lines)
                     eps_values.append(eps)
@@ -156,7 +157,7 @@ def watch_model(rounds=1000):
 # Train and save the model at intervals
 idx = 0
 while True:
-    train(5000)
+    train(10000)
     torch.save(policy_net, f'{load_net_prefix}{idx}')
     idx += 1
 
