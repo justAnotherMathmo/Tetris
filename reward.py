@@ -12,12 +12,12 @@ def get_height(env):
 
 def create_reward(block_placed, action, is_done, new_height, old_height, new_lines, old_lines,
                   include_height=True, include_score=True, include_death=True):
-    if not block_placed:
-        # Punish a little for doing something that isn't the empty move, or down
-        if action in [0, 5, 6]:
-            return 0
-        else:
-            return params.MOVEMENT_COST
+    # if not block_placed:
+    #     # Punish a little for doing something that isn't the empty move, or down
+    #     if action in [0, 5, 6]:
+    #         return 0
+    #     else:
+    #         return params.MOVEMENT_COST
 
     if include_death and is_done:
         return -10.0
