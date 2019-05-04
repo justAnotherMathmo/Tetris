@@ -37,6 +37,8 @@ class NoisyFactorizedLinear(nn.Linear):
 class DQN(nn.Module):
     def __init__(self, h, w, num_outputs):
         super().__init__()
+        self.h = h
+        self.w = w
         self.input_layer_width = h * w
         self.num_outputs = num_outputs
 
@@ -65,17 +67,26 @@ class DQN(nn.Module):
         self.abn = nn.BatchNorm1d(layer_widths[4])
         self.advantage_layer2 = nn.Linear(layer_widths[4], self.num_outputs)
 
+        # Final frame prediction
+        self.state_prediction_layer = nn.Linear(layer_widths[3] * self.input_layer_width, self.input_layer_width)
+
     def forward(self, x):
         x1 = F.relu(self.bn0(self.conv0(x)))
         x2 = F.relu(self.bn1(self.conv1(x1 + x)))
         x3 = F.relu(self.bn2(self.conv2(x2 + x1)))
-        x = x3.view(x3.size(0), -1)
+        conv_x = x3.view(x3.size(0), -1)
 
-        value = F.relu(self.vbn(self.value_layer1(x)))
+        # Q function layers:
+        value = F.relu(self.vbn(self.value_layer1(conv_x)))
         value = self.value_layer2(value)
 
-        advg = F.relu(self.abn(self.advantage_layer1(x)))
+        advg = F.relu(self.abn(self.advantage_layer1(conv_x)))
         advg = self.advantage_layer2(advg)
 
-        return value.expand(-1, self.num_outputs) + (advg - advg.mean(1, keepdim=True))
+        q_val = value.expand(-1, self.num_outputs) + (advg - advg.mean(1, keepdim=True))
 
+        # State layers
+        # Tanh + etc. to turn this into a probability
+        state_prediction = (F.tanh(self.state_prediction_layer(conv_x).view(-1, 1, self.h, self.w) + 2 * x) + 1) / 2
+
+        return q_val, state_prediction

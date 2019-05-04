@@ -25,14 +25,14 @@ env = Tetris(pieces=[O])
 env.lockout_rate = 0
 env.start_drop_rate = 1
 env.reset()
-num_states = len(env.actions)
+num_states = len(env.actions) - 2  # Get rid of hard + soft drop for now...
 
 # Get screen size so that we can initialize layers correctly based on shape
 init_screen = utils.get_screen(env.get_grid(), device)
 _, _, screen_height, screen_width = init_screen.shape
 
 # Attempt to load a net - if not make a new one
-load_net_prefix = './models/resConv'
+load_net_prefix = './models/resConvNoisy'
 load_net_number = 0
 net_to_load = f'{load_net_prefix}{load_net_number}'
 try:
@@ -59,8 +59,9 @@ def select_action(state, eps_threshold):
         with torch.no_grad():
             # t.max(1) will return largest column value of each row.
             # second column on max result is index of where max element was
-            # found, so we pick action with the larger expected reward.
-            return policy_net.eval()(state).max(1)[1].view(1, 1)
+            # # found, so we pick action with the larger expected reward.
+            # writer.add_scalar('Q0', policy_net.eval()(state)[0, 0])
+            return policy_net.eval()(state)[0].max(1)[1].view(1, 1)
     else:
         return torch.tensor([[random.randrange(num_states)]], device=device, dtype=torch.long)
 
@@ -114,7 +115,6 @@ def train(num_episodes=1000, human=False):
                 reward_sum = (params.MULISTEP_GAMMA * reward_sum) + reward_single - (params.MULISTEP_GAMMA ** params.MULTISTEP_PARAM) * reward_array[array_pos]
                 reward_array[array_pos] = reward_single
                 reward_sum = torch.tensor([reward_sum], device=device).type(torch.float)
-                # print(reward_single, reward_sum, piece_fell, action, done, height, old_height, lines, old_lines)
 
                 # Store the transition in memory
                 if warmup > params.MULTISTEP_PARAM:
@@ -157,10 +157,6 @@ def watch_model(rounds=1000):
 # Train and save the model at intervals
 idx = 0
 while True:
-    train(10000)
+    train(5000)
     torch.save(policy_net, f'{load_net_prefix}{idx}')
     idx += 1
-
-# from tetris.Tetris import watch_bot_tetris
-# action_func = lambda e: policy_net.eval()(utils.get_screen(e.get_grid(), device)).max(1)[1].view(1, 1).squeeze().item()
-# watch_bot_tetris(action_func, pieces=[O])

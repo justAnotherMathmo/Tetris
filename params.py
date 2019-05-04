@@ -1,5 +1,5 @@
 # Size of batches to optimize
-BATCH_SIZE = 512
+BATCH_SIZE = 256
 # Rate at which to discount rewards in the future
 GAMMA = 0.99
 # Rate at which to discount rewards over the multistep horizon
@@ -16,8 +16,10 @@ EPS_DECAY = 500000
 # How many games occur between policy and target net updates
 TARGET_UPDATE = 25
 # Cost of doing a move that isn't a drop or a no-action
-MOVEMENT_COST = 0 # 0.01
+MOVEMENT_COST = 0
 LAYER_HISTORY = 4
 TRAIN_RATE = 4
 LEARNING_RATE = 5 * 10 ** (-4)
-MEMORY_SIZE = 1000000
+MEMORY_SIZE = 5000000
+STATE_VALUE_LOSS_RATIO = 50  # Value we give to state loss over Q loss
+TENSORBOARD_LOGGING = False

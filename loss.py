@@ -32,7 +32,16 @@ def optimize_model(optimizer, model_memory, policy_net, target_net):
 
 
 def _compute_loss(_state, _action, _next_state, _reward, policy_net, target_net, batch_size=params.BATCH_SIZE):
-    state_action_values = policy_net(_state).gather(1, _action)
-    next_state_values = target_net(_next_state)[0][policy_net(_next_state).argmax(1)[0]].detach()
-    expected_state_action_values = (next_state_values * params.GAMMA) + _reward
-    return F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+    state_action_values, expected_state = policy_net(_state)
+    state_action_values = state_action_values.gather(1, _action)
+
+    # Compute value loss (traditional DQN)
+    next_state_values = target_net(_next_state)[0].gather(1, policy_net(_next_state)[0].argmax(1).view(-1, 1)).detach()
+
+    expected_state_action_values = (next_state_values * params.GAMMA) + _reward.unsqueeze(1)
+    value_loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+
+    # Compute state loss
+    state_loss = F.binary_cross_entropy(expected_state, _next_state)
+
+    return value_loss + state_loss * params.STATE_VALUE_LOSS_RATIO

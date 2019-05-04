@@ -1,9 +1,13 @@
 import math
 import torch
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import params
 
+is_ipython = 'inline' in matplotlib.get_backend()
+if is_ipython:
+    from IPython import display
 
 # Means that program doesn't stop to show the graph
 plt.ion()
@@ -53,4 +57,13 @@ def plot_durations(episode_durations, lines_cleared, eps, save=None):
     if save is not None:
         fig.savefig(save, bbox_inches='tight')
 
-    plt.show()
+    if is_ipython:
+        display.clear_output(wait=True)
+        plt.show()
+    else:
+        plt.show()
+
+
+if params.TENSORBOARD_LOGGING:
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
