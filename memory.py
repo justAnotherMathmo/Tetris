@@ -2,7 +2,7 @@ import random
 import numpy as np
 from collections import namedtuple
 
-Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'next_piece'))
 
 
 class ReplayMemory(object):
@@ -21,6 +21,9 @@ class ReplayMemory(object):
 
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
+
+    def dump(self, path):
+        """Dumps the state of the memory to disk"""
 
     def __len__(self):
         return len(self.memory)

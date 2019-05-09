@@ -57,36 +57,50 @@ class DQN(nn.Module):
         self.conv2 = nn.Conv2d(layer_widths[2], layer_widths[3], 3, padding=1)
         self.bn2 = nn.BatchNorm2d(layer_widths[3])
 
+        # Split layer size
+        split_layer_size = layer_widths[3] * self.input_layer_width + 16 + self.h * self.w
+
         # Value Net
-        self.value_layer1 = nn.Linear(layer_widths[3] * self.input_layer_width, layer_widths[4])
+        self.value_layer1 = nn.Linear(split_layer_size, layer_widths[4])
         self.vbn = nn.BatchNorm1d(layer_widths[4])
         self.value_layer2 = nn.Linear(layer_widths[4], 1)
 
         # Advantage Net
-        self.advantage_layer1 = nn.Linear(layer_widths[3] * self.input_layer_width, layer_widths[4])
+        self.advantage_layer1 = nn.Linear(split_layer_size, layer_widths[4])
         self.abn = nn.BatchNorm1d(layer_widths[4])
-        self.advantage_layer2 = nn.Linear(layer_widths[4], self.num_outputs)
+        self.advantage_layer2 = NoisyFactorizedLinear(layer_widths[4], self.num_outputs)
 
         # Final frame prediction
-        self.state_prediction_layer = nn.Linear(layer_widths[3] * self.input_layer_width, self.input_layer_width)
+        self.state_prediction_layer = nn.Linear(split_layer_size, self.input_layer_width)
 
-    def forward(self, x):
-        x1 = F.relu(self.bn0(self.conv0(x)))
-        x2 = F.relu(self.bn1(self.conv1(x1 + x)))
-        x3 = F.relu(self.bn2(self.conv2(x2 + x1)))
-        conv_x = x3.view(x3.size(0), -1)
+    def forward(self, state, piece):
+        conv1 = F.relu(self.bn0(self.conv0(state)))
+        conv2 = F.relu(self.bn1(self.conv1(conv1 + state)))
+        conv3 = F.relu(self.bn2(self.conv2(conv2 + conv1)))
+        conv_and_piece = torch.cat([
+            conv3.view(conv3.size(0), -1),
+            piece.view(piece.size(0), -1),
+            state.view(state.size(0), -1)
+        ], dim=1)
 
-        # Q function layers:
-        value = F.relu(self.vbn(self.value_layer1(conv_x)))
-        value = self.value_layer2(value)
-
-        advg = F.relu(self.abn(self.advantage_layer1(conv_x)))
+        # Advantage layers (relative advantage of state over other states)
+        advg = F.relu(self.abn(self.advantage_layer1(conv_and_piece)))
         advg = self.advantage_layer2(advg)
+
+        # # Only need to evaluate advantage layer for deciding actions
+        # # Comment out for debug purposes
+        # if self.training:
+        #     return advg
+
+        # Value layers (value of current state):
+        value = F.relu(self.vbn(self.value_layer1(conv_and_piece)))
+        value = self.value_layer2(value)
 
         q_val = value.expand(-1, self.num_outputs) + (advg - advg.mean(1, keepdim=True))
 
         # State layers
-        # Tanh + etc. to turn this into a probability
-        state_prediction = (F.tanh(self.state_prediction_layer(conv_x).view(-1, 1, self.h, self.w) + 2 * x) + 1) / 2
+        # Sigmoid + etc. to turn this into a probability is done in the loss function
+        # Bias by current state
+        state_prediction = self.state_prediction_layer(conv_and_piece).view(-1, 1, self.h, self.w) + state
 
         return q_val, state_prediction

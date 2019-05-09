@@ -19,16 +19,22 @@ import loss
 import torch
 import torch.optim as optim
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+if params.TENSORBOARD_LOGGING:
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+else:
+    writer = None
 
 # Game initialisation
-env = Tetris(pieces=[O])
+# env = Tetris(pieces=[O])
+env = Tetris()
 env.lockout_rate = 0
 env.start_drop_rate = 1
 env.reset()
 num_states = len(env.actions) - 2  # Get rid of hard + soft drop for now...
 
 # Get screen size so that we can initialize layers correctly based on shape
-init_screen = utils.get_screen(env.get_grid(), device)
+init_screen, _ = utils.get_screen(env.get_grid(), device)
 _, _, screen_height, screen_width = init_screen.shape
 
 # Attempt to load a net - if not make a new one
@@ -53,18 +59,24 @@ optimizer = optim.Adam(policy_net.parameters(), lr=params.LEARNING_RATE)
 model_memory = memory.ReplayMemory(params.MEMORY_SIZE)
 
 
-def select_action(state, eps_threshold):
+def select_action(state, eps_threshold, next_piece, force_log=False):
     sample = random.random()
     if sample > eps_threshold:
         with torch.no_grad():
             # t.max(1) will return largest column value of each row.
             # second column on max result is index of where max element was
             # # found, so we pick action with the larger expected reward.
-            # writer.add_scalar('Q0', policy_net.eval()(state)[0, 0])
-            return policy_net.eval()(state)[0].max(1)[1].view(1, 1)
+            q_vals = policy_net.eval()(state, next_piece)[0]
+            if force_log:
+                sum_q = q_vals.abs().sum()
+                # utils.tblogger('Q0', q_vals[0, 0] / sum_q, writer)
+                # utils.tblogger('Q1', q_vals[0, 1] / sum_q, writer)
+                # utils.tblogger('Q2', q_vals[0, 2] / sum_q, writer)
+                # utils.tblogger('Q3', q_vals[0, 3] / sum_q, writer)
+                # utils.tblogger('Q4', q_vals[0, 4] / sum_q, writer)
+            return q_vals.max(1)[1].view(1, 1)
     else:
         return torch.tensor([[random.randrange(num_states)]], device=device, dtype=torch.long)
-
 
 # Yes yes, I'm a terrible person - I'll clean this up later
 steps_done = 0
@@ -80,8 +92,8 @@ def train(num_episodes=1000, human=False):
         # Initialize the environment and state
         height, old_height, lines, old_lines = 0, 0, 0, 0
         env.reset()
-        last_state = utils.get_screen(env.get_grid(), device)
-        state = utils.get_screen(env.get_grid(), device)
+        last_state, _ = utils.get_screen(env.get_grid(), device)
+        state, next_piece = utils.get_screen(env.get_grid(), device)
 
         # if not human:
         state_array = [last_state] * params.MULTISTEP_PARAM
@@ -90,6 +102,8 @@ def train(num_episodes=1000, human=False):
         array_pos = 0
         next_array_pos = 1
         warmup = 0
+        game_reward = 0
+        game_reward_decayed = 0
 
         for t in itertools.count():
             steps_done += 1
@@ -98,12 +112,12 @@ def train(num_episodes=1000, human=False):
                 eps = 0
             else:
                 eps = utils.curr_eps(steps_done)
-            action = select_action(state, eps)
+            action = select_action(state, eps, next_piece, i_episode % 100 == 0)
             state, _, done = env.step(action.item())
             piece_fell = reward.did_piece_fall(env)
 
             # Observe new state
-            state = utils.get_screen(state, device)
+            state, next_piece = utils.get_screen(state, device)
 
             if not human:
                 state_array[array_pos] = state
@@ -115,16 +129,27 @@ def train(num_episodes=1000, human=False):
                 reward_sum = (params.MULISTEP_GAMMA * reward_sum) + reward_single - (params.MULISTEP_GAMMA ** params.MULTISTEP_PARAM) * reward_array[array_pos]
                 reward_array[array_pos] = reward_single
                 reward_sum = torch.tensor([reward_sum], device=device).type(torch.float)
+                game_reward += reward_single
+                game_reward_decayed = game_reward_decayed * params.GAMMA + reward_single
 
                 # Store the transition in memory
                 if warmup > params.MULTISTEP_PARAM:
-                    model_memory.push(state_array[next_array_pos], action, state, reward_sum)
+                    model_memory.push(state_array[next_array_pos], action, state, reward_sum, next_piece)
 
                 # Perform one step of the optimization (on the target network)
                 if (warmup + 1) % params.TRAIN_RATE == 0:
-                    loss.optimize_model(optimizer, model_memory, policy_net, target_net)
+                    loss.optimize_model(optimizer, model_memory, policy_net, target_net, writer)
                 if done or t > 5000:
                     # 5000 here just to stop us playing forever...
+
+                    # Tensorboard logging
+                    utils.tblogger('Duration', t, writer)
+                    utils.tblogger('Cleared Lines', lines, writer)
+                    utils.tblogger('Epsilon', eps, writer)
+                    utils.tblogger('Reward', game_reward, writer)
+                    utils.tblogger('Decayed Reward', game_reward_decayed, writer)
+
+                    # Normal logging
                     episode_durations.append(t + 1)
                     lines_cleared.append(lines)
                     eps_values.append(eps)
